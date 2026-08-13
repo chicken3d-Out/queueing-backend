@@ -3,14 +3,17 @@ const { pool } = require('../../db');
 const { requireLogin, requireRole } = require('../../middleware/auth');
 
 const router = express.Router();
-router.use(requireLogin, requireRole(['admin']));
+router.use(requireLogin);
 
-router.get('/', async (req, res) => {
+// Reading the list of transactions/queue types is needed by Front Desk too
+// (to populate the "which transaction?" dropdown) — only editing ranges is
+// admin-only.
+router.get('/', requireRole(['admin', 'frontdesk']), async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM queue_types ORDER BY start_number ASC');
   res.json({ success: true, queue_types: rows });
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireRole(['admin']), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const { name, start_number: startNumber, end_number: endNumber, active } = req.body || {};
   await pool.query(
