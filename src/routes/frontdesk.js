@@ -116,10 +116,10 @@ router.post('/cancel-ticket', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Ticket not found.' });
     }
 
-    const removableStatuses = ['WAITING', 'CALLED', 'SERVING'];
+    const removableStatuses = ['WAITING', 'CALLED', 'SERVING', 'SKIPPED'];
     if (!removableStatuses.includes(ticket.status)) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ success: false, error: 'This ticket has already been completed, skipped, or cancelled.' });
+      return res.status(400).json({ success: false, error: 'This ticket has already been completed or cancelled.' });
     }
 
     await client.query(`UPDATE tickets SET status = 'CANCELLED', cancelled_at = now() WHERE id = $1`, [ticketId]);
