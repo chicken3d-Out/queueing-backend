@@ -9,7 +9,14 @@ router.use(requireLogin);
 // (to populate the "which transaction?" dropdown) — only editing ranges is
 // admin-only.
 router.get('/', requireRole(['admin', 'frontdesk']), async (req, res) => {
-  const { rows } = await pool.query('SELECT * FROM queue_types ORDER BY start_number ASC');
+  // Front Desk only needs (and should only see) queues currently accepting
+  // tickets. Admin sees everything, including deactivated ones, in case a
+  // "manage queues" screen ever needs to show/reactivate them.
+  const query =
+    req.user.role === 'admin'
+      ? 'SELECT * FROM queue_types ORDER BY start_number ASC'
+      : 'SELECT * FROM queue_types WHERE active = TRUE ORDER BY start_number ASC';
+  const { rows } = await pool.query(query);
   res.json({ success: true, queue_types: rows });
 });
 

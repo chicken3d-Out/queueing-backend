@@ -4,15 +4,16 @@
 BEGIN;
 
 INSERT INTO queue_types (code, name, start_number, end_number, active) VALUES
-    ('R',  'Receiving',           1,   100, TRUE),
-    ('RS', 'Releasing — Schools', 200, 299, TRUE),
-    ('RD', 'Releasing — Documents', 300, 399, TRUE),
-    ('A',  'Authentication',      400, 499, TRUE);
+    ('R',  'Receiving',                  1,  89, TRUE),
+    ('RP', 'Receiving - Priority Lane', 90, 100, TRUE),
+    ('RS', 'Releasing - Schools',      200, 299, TRUE),
+    ('RD', 'Releasing - Documents',    300, 399, TRUE),
+    ('A',  'Authentication',           400, 499, TRUE);
 
 INSERT INTO windows (window_number, window_name, queue_type_id, status) VALUES
     (1, 'Window 1', (SELECT id FROM queue_types WHERE code = 'R'),  'active'),
     (2, 'Window 2', (SELECT id FROM queue_types WHERE code = 'R'),  'active'),
-    (3, 'Window 3', (SELECT id FROM queue_types WHERE code = 'R'),  'active'),
+    (3, 'Window 3', (SELECT id FROM queue_types WHERE code = 'RP'), 'active'),
     (4, 'Window 4', (SELECT id FROM queue_types WHERE code = 'RS'), 'active'),
     (5, 'Window 5', (SELECT id FROM queue_types WHERE code = 'RD'), 'active'),
     (6, 'Window 6', (SELECT id FROM queue_types WHERE code = 'A'),  'active');
