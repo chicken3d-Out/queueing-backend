@@ -105,20 +105,55 @@ router.post('/cancel-ticket', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Invalid ticket.' });
   }
 
-  const { rows } = await pool.query('SELECT * FROM tickets WHERE id = $1 LIMIT 1', [ticketId]);
-  const ticket = rows[0];
-  if (!ticket) {
-    return res.status(404).json({ success: false, error: 'Ticket not found.' });
-  }
-  if (ticket.status !== 'WAITING') {
-    return res.status(400).json({ success: false, error: 'Only tickets still waiting can be cancelled.' });
-  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  await pool.query(`UPDATE tickets SET status = 'CANCELLED', cancelled_at = now() WHERE id = $1`, [ticketId]);
-  await logTicketHistory(pool, { ticketId, action: 'CANCEL', fromStatus: 'WAITING', toStatus: 'CANCELLED', userId: req.user.id });
+    const { rows } = await client.query('SELECT * FROM tickets WHERE id = $1 LIMIT 1 FOR UPDATE', [ticketId]);
+    const ticket = rows[0];
+    if (!ticket) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, error: 'Ticket not found.' });
+    }
 
-  broadcastQueueUpdate();
-  res.json({ success: true });
+    const removableStatuses = ['WAITING', 'CALLED', 'SERVING'];
+    if (!removableStatuses.includes(ticket.status)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, error: 'This ticket has already been completed, skipped, or cancelled.' });
+    }
+
+    await client.query(`UPDATE tickets SET status = 'CANCELLED', cancelled_at = now() WHERE id = $1`, [ticketId]);
+
+    // If this ticket was actively assigned to a window (CALLED/SERVING),
+    // clear it there too — otherwise the operator's screen would keep
+    // showing a "current ticket" that Front Desk just removed.
+    if (ticket.window_id) {
+      await client.query(
+        'UPDATE windows SET current_ticket_id = NULL WHERE id = $1 AND current_ticket_id = $2',
+        [ticket.window_id, ticketId]
+      );
+    }
+
+    await logTicketHistory(client, {
+      ticketId,
+      action: 'CANCEL',
+      fromStatus: ticket.status,
+      toStatus: 'CANCELLED',
+      windowId: ticket.window_id || null,
+      userId: req.user.id,
+      notes: ticket.status !== 'WAITING' ? 'Removed from Front Desk after being called' : null,
+    });
+
+    await client.query('COMMIT');
+    broadcastQueueUpdate();
+    res.json({ success: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('cancel_ticket failed:', err);
+    res.status(500).json({ success: false, error: process.env.APP_DEBUG === 'true' ? err.message : 'A system error occurred while removing the ticket.' });
+  } finally {
+    client.release();
+  }
 });
 
 module.exports = router;
